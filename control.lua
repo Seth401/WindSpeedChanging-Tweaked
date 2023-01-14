@@ -29,7 +29,6 @@ local function initSurface(surface_name)
         global.surfaceHandlers[surface_name] = {
             windSpeedMin = windSpeedMin,
             windSpeedMax = windSpeedMax,
-            waitForTick = 0,
             sign = ( surfaceWindSpeed > windSpeedMax and 1 or -1),
             points = {
                 {tick = 0, value = surfaceWindSpeed},
@@ -64,7 +63,7 @@ local function onInit()
     if not global.surfaceHandlers then
         global.surfaceHandlers = {}
     end
-
+    
     for surfaceName, _ in pairs (game.surfaces) do
         initSurface(surfaceName)
     end
@@ -101,7 +100,7 @@ local function onNthTick ()
     for surfaceName, surface in pairs (game.surfaces) do
         local handler = global.surfaceHandlers[surfaceName]
         
-        if handler.waitForTick <= tick then
+        if handler.points[2].tick <= tick then
             -- End of the last defined season has been reached
             
             local windSpeedCurrent = surface.wind_speed
@@ -113,7 +112,6 @@ local function onNthTick ()
             local tickFuture = tick + seasonLength
             
             handler.sign = sign
-            handler.waitForTick = tickFuture
             
             if sign > 0 then -- trending towards windSpeedMax
                 windChange = (rnd^2) * (handler.windSpeedMax - windSpeedCurrent)
