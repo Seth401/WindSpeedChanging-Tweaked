@@ -1,0 +1,13 @@
+{
+  "name": "WindSpeedChanging",
+  "version": "1.1.2",
+  
+  "title": "Wind Speed Changing",
+  "description": "The speed of wind changes dynamically",
+  
+  "author": "darkfrei",
+  "license": "MIT",
+  
+  "dependencies": ["base"],
+  "factorio_version": "1.1"
+}
