@@ -1,44 +1,51 @@
-local max_speed = 0.2 -- really high speed, default surface speed is 0.02
-local min_speed = 0
+local windSpeedMax = settings.global["WindSpeedChanging-Tweaked-windSpeedMax"].value
+local windSpeedMin = settings.global["WindSpeedChanging-Tweaked-windSpeedMin"].value
 
 -- Season length given in ticks. One tick is 1/60th of a second.
 -- 1 = tick; 1*60 = one second; 1*60^2 = one minute; 1*60^3 = one hour
-local shortest_season = 20*60
-local longest_season = 3*60^2
+local seasonShortest = settings.global["WindSpeedChanging-Tweaked-seasonShortest"].value*60
+local seasonLongest = settings.global["WindSpeedChanging-Tweaked-seasonLongest"].value*60
 
-local function get_season_length (shortest_season, longest_season, speed_rnd)
+local function calcSeasonLength(shortest_season, longest_season, speed_rnd)
   local rnd_high = (1-(1-speed_rnd)^2)
   return (math.ceil((shortest_season + rnd_high*(longest_season-shortest_season))/60)*60)
 end
 
 local function onConfigurationChanged()
   -- This doesn't do anything yet.
+  windSpeedMax = settings.global["WindSpeedChanging-Tweaked-windSpeedMax"].value
+  windSpeedMin = settings.global["WindSpeedChanging-Tweaked-windSpeedMin"].value
+
+  -- Season length given in ticks. One tick is 1/60th of a second.
+  -- 1 = tick; 1*60 = one second; 1*60^2 = one minute; 1*60^3 = one hour
+  seasonShortest = settings.global["WindSpeedChanging-Tweaked-seasonShortest"].value*60
+  seasonLongest = settings.global["WindSpeedChanging-Tweaked-seasonLongest"].value*60
 end
 
 local function initSurface(surface_name)
   -- If the surface hasn't been intialized yet define the basic structure.
-  if not global.surface_handlers[surface_name] then
-    global.surface_handlers[surface_name] = {min_speed = min_speed, max_speed = max_speed}
+  if not global.surfaceHandlers[surface_name] then
+    global.surfaceHandlers[surface_name] = {min_speed = windSpeedMin, max_speed = windSpeedMax}
   else
     return
   end
 
-  local handler = global.surface_handlers[surface_name]
+  local handler = global.surfaceHandlers[surface_name]
 
   if not handler.sign then
     -- If the surface hasn't been modified since it's been intialized
     
-    local season_length = math.ceil(math.random (shortest_season, longest_season)/60)*60 -- in ticks
+    local season_length = math.ceil(math.random (seasonShortest, seasonLongest)/60)*60 -- in ticks
     local till_tick = game.tick + season_length
     local actual_wind_speed = game.get_surface(surface_name).wind_speed
     local next_point_value
     local rnd = math.random()
-    local sign = (actual_wind_speed > max_speed and 1 or -1)
+    local sign = (actual_wind_speed > windSpeedMax and 1 or -1)
     
     if sign > 0 then -- trending towards max_speed
-      next_point_value = actual_wind_speed + rnd * (max_speed - actual_wind_speed)
+      next_point_value = actual_wind_speed + rnd * (windSpeedMax - actual_wind_speed)
     else  -- trending towards min_speed
-      next_point_value = actual_wind_speed - rnd * (actual_wind_speed - min_speed)
+      next_point_value = actual_wind_speed - rnd * (actual_wind_speed - windSpeedMin)
     end
     
     handler.sign = sign
@@ -53,16 +60,16 @@ local function onSurfaceCreated(event)
 end
 
 local function onSurfaceImported(event)
-  if global.surface_handlers[event.original_name] then
-    global.surface_handlers[game.get_surface(event.surface_index).name] = global.surface_handlers[event.original_name]
+  if global.surfaceHandlers[event.original_name] then
+    global.surfaceHandlers[game.get_surface(event.surface_index).name] = global.surfaceHandlers[event.original_name]
   else
     initSurface(game.get_surface(event.surface_index).name)
   end
 end
 
 local function onSurfaceRenamed(event)
-  if global.surface_handlers[event.old_name] then
-    global.surface_handlers[event.new_name] = global.surface_handlers[event.old_name]
+  if global.surfaceHandlers[event.old_name] then
+    global.surfaceHandlers[event.new_name] = global.surfaceHandlers[event.old_name]
   else
     initSurface(event.new_name)
   end
@@ -70,8 +77,8 @@ end
 
 local function onInit()
   -- Mod hasn't been intialized
-  if not global.surface_handlers then
-    global.surface_handlers = {}
+  if not global.surfaceHandlers then
+    global.surfaceHandlers = {}
   end
 
   for surface_name, surface in pairs (game.surfaces) do
@@ -108,7 +115,7 @@ local function onNthTick ()
   
   -- Iterate all surfaces and modify wind_speed on each surface.
   for surface_name, surface in pairs (game.surfaces) do
-    local handler = global.surface_handlers[surface_name]
+    local handler = global.surfaceHandlers[surface_name]
     
     if handler.wait_for_tick <= tick then
       -- End of the last defined season has been reached
@@ -118,17 +125,17 @@ local function onNthTick ()
       local next_point_value
       local rnd = math.random()
       local wind_changing
-      local season_length = get_season_length (shortest_season, longest_season, rnd)
+      local season_length = calcSeasonLength (seasonShortest, seasonLongest, rnd)
       local till_tick = tick + season_length
       
       handler.sign = sign
       handler.wait_for_tick = till_tick
       
       if sign > 0 then -- trending towards max_speed
-        wind_changing = (rnd^2) * (max_speed - actual_wind_speed)
+        wind_changing = (rnd^2) * (windSpeedMax - actual_wind_speed)
         next_point_value = actual_wind_speed + wind_changing
       else -- trending towards min_speed
-        wind_changing = (rnd^2) * (actual_wind_speed - min_speed)
+        wind_changing = (rnd^2) * (actual_wind_speed - windSpeedMin)
         next_point_value = actual_wind_speed - wind_changing
       end
       
