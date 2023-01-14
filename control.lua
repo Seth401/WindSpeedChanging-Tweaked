@@ -6,9 +6,9 @@ local windSpeedMin = settings.global["WindSpeedChanging-Tweaked-windSpeedMin"].v
 local seasonShortest = settings.global["WindSpeedChanging-Tweaked-seasonShortest"].value*60
 local seasonLongest = settings.global["WindSpeedChanging-Tweaked-seasonLongest"].value*60
 
-local function calcSeasonLength(shortest_season, longest_season, speed_rnd)
-  local rnd_high = (1-(1-speed_rnd)^2)
-  return (math.ceil((shortest_season + rnd_high*(longest_season-shortest_season))/60)*60)
+local function calcSeasonLength(lengthMin, lengthMax)
+  local durationVariance = (lengthMax-lengthMin) -- Difference between the min and max
+  return lengthMin + math.ceil(durationVariance * (1-(1-math.random())^2))
 end
 
 local function onConfigurationChanged()
@@ -24,34 +24,20 @@ end
 
 local function initSurface(surface_name)
   -- If the surface hasn't been intialized yet define the basic structure.
+  local surfaceWindSpeed = game.get_surface(surface_name).wind_speed
   if not global.surfaceHandlers[surface_name] then
-    global.surfaceHandlers[surface_name] = {min_speed = windSpeedMin, max_speed = windSpeedMax}
+    global.surfaceHandlers[surface_name] = {
+      windSpeedMin = windSpeedMin,
+      windSpeedMax = windSpeedMax,
+      waitForTick = 0,
+      sign = ( surfaceWindSpeed > windSpeedMax and 1 or -1),
+      points = {
+        {tick = 0, value = surfaceWindSpeed},
+        {tick = 1, value = surfaceWindSpeed}
+      }
+    }
   else
     return
-  end
-
-  local handler = global.surfaceHandlers[surface_name]
-
-  if not handler.sign then
-    -- If the surface hasn't been modified since it's been intialized
-    
-    local season_length = math.ceil(math.random (seasonShortest, seasonLongest)/60)*60 -- in ticks
-    local till_tick = game.tick + season_length
-    local actual_wind_speed = game.get_surface(surface_name).wind_speed
-    local next_point_value
-    local rnd = math.random()
-    local sign = (actual_wind_speed > windSpeedMax and 1 or -1)
-    
-    if sign > 0 then -- trending towards max_speed
-      next_point_value = actual_wind_speed + rnd * (windSpeedMax - actual_wind_speed)
-    else  -- trending towards min_speed
-      next_point_value = actual_wind_speed - rnd * (actual_wind_speed - windSpeedMin)
-    end
-    
-    handler.sign = sign
-    handler.points = {{tick = game.tick, value = actual_wind_speed}, {tick = till_tick, value = next_point_value}}
-    handler.wait_for_tick = till_tick
-    
   end
 end
 
@@ -81,17 +67,17 @@ local function onInit()
     global.surfaceHandlers = {}
   end
 
-  for surface_name, surface in pairs (game.surfaces) do
-    initSurface(surface_name)
+  for surfaceName, _ in pairs (game.surfaces) do
+    initSurface(surfaceName)
   end
 end
 
--- get_values
+-- getValue
 -- The function returns a intermediate value for a given point
 -- in time between pointA and pointB. Instead of using a simple average
 -- the goal is to have a somewhat nicer curve that connects both points.
 -- That way instead of having a zigzag change there is a gradual value change.
-local function get_value (pointA, pointB)
+local function getValue (pointA, pointB)
   local duration = pointB.tick - pointA.tick -- Tick difference between points.
   local targetValue = pointB.value - pointA.value -- Value difference between points.
   local currentPosition = game.tick - pointA.tick -- Current position between points.
@@ -114,44 +100,44 @@ local function onNthTick ()
   local tick = game.tick
   
   -- Iterate all surfaces and modify wind_speed on each surface.
-  for surface_name, surface in pairs (game.surfaces) do
-    local handler = global.surfaceHandlers[surface_name]
+  for surfaceName, surface in pairs (game.surfaces) do
+    local handler = global.surfaceHandlers[surfaceName]
     
-    if handler.wait_for_tick <= tick then
+    if handler.waitForTick <= tick then
       -- End of the last defined season has been reached
       
-      local actual_wind_speed=surface.wind_speed
+      local windSpeedCurrent = surface.wind_speed
       local sign = -handler.sign
-      local next_point_value
+      local valueNext = nil
       local rnd = math.random()
-      local wind_changing
-      local season_length = calcSeasonLength (seasonShortest, seasonLongest, rnd)
-      local till_tick = tick + season_length
+      local windChange
+      local seasonLength = calcSeasonLength (seasonShortest, seasonLongest, rnd)
+      local tickFuture = tick + seasonLength
       
       handler.sign = sign
-      handler.wait_for_tick = till_tick
+      handler.waitForTick = tickFuture
       
-      if sign > 0 then -- trending towards max_speed
-        wind_changing = (rnd^2) * (windSpeedMax - actual_wind_speed)
-        next_point_value = actual_wind_speed + wind_changing
-      else -- trending towards min_speed
-        wind_changing = (rnd^2) * (actual_wind_speed - windSpeedMin)
-        next_point_value = actual_wind_speed - wind_changing
+      if sign > 0 then -- trending towards windSpeedMax
+        windChange = (rnd^2) * (handler.windSpeedMax - windSpeedCurrent)
+        valueNext = windSpeedCurrent + windChange
+      else -- trending towards windSpeedMin
+        windChange = (rnd^2) * (windSpeedCurrent - handler.windSpeedMin)
+        valueNext = windSpeedCurrent - windChange
       end
+
+      -- Update the last element
+      handler.points[1] = handler.points[2]
+      handler.points[2] = {tick = tickFuture, value = valueNext}
       
-      -- Add season to the list of seasons so far
-      table.insert (handler.points, {tick = till_tick, value = next_point_value})
-      
-    else
-      -- Season is in progress
-      
-      local points_amount = #handler.points -- Length of points table
-      local prelast_point = handler.points[points_amount-1]
-      local    last_point = handler.points[points_amount]
-      local new_wind_speed = get_value (prelast_point, last_point)
-      
-      surface.wind_speed = new_wind_speed
+      -- game.print("New Season with a length of " .. (seasonLength/60) ..  " s for surface " .. surfaceName)
     end
+
+    local pointsPrevious = handler.points[1]
+    local     pointsLast = handler.points[2]
+    local   windSpeedNew = getValue (pointsPrevious, pointsLast)
+    surface.wind_speed = windSpeedNew
+    
+    -- game.print("Remaining time for season " .. (math.ceil((pointsLast.tick - game.tick)/60)) .. " s, current wind " .. surface.wind_speed)
     
   end -- End of loop for surface
 end -- End of on_nth_tick
