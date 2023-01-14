@@ -1,14 +1,82 @@
-local function prob_low (value)
-  return value^2
-end
+local max_speed = 0.2 -- really high speed, default surface speed is 0.02
+local min_speed = 0
 
-local function prob_high (value)
-  return (1-(1-value)^2)
-end
+-- Season length given in ticks. One tick is 1/60th of a second.
+-- 1 = tick; 1*60 = one second; 1*60^2 = one minute; 1*60^3 = one hour
+local shortest_season = 20*60
+local longest_season = 3*60^2
 
 local function get_season_length (shortest_season, longest_season, speed_rnd)
-  local rnd_high = prob_high (speed_rnd)
+  local rnd_high = (1-(1-speed_rnd)^2)
   return (math.ceil((shortest_season + rnd_high*(longest_season-shortest_season))/60)*60)
+end
+
+local function onConfigurationChanged()
+  -- This doesn't do anything yet.
+end
+
+local function initSurface(surface_name)
+  -- If the surface hasn't been intialized yet define the basic structure.
+  if not global.surface_handlers[surface_name] then
+    global.surface_handlers[surface_name] = {min_speed = min_speed, max_speed = max_speed}
+  else
+    return
+  end
+
+  local handler = global.surface_handlers[surface_name]
+
+  if not handler.sign then
+    -- If the surface hasn't been modified since it's been intialized
+    
+    local season_length = math.ceil(math.random (shortest_season, longest_season)/60)*60 -- in ticks
+    local till_tick = game.tick + season_length
+    local actual_wind_speed = game.get_surface(surface_name).wind_speed
+    local next_point_value
+    local rnd = math.random()
+    local sign = (actual_wind_speed > max_speed and 1 or -1)
+    
+    if sign > 0 then -- trending towards max_speed
+      next_point_value = actual_wind_speed + rnd * (max_speed - actual_wind_speed)
+    else  -- trending towards min_speed
+      next_point_value = actual_wind_speed - rnd * (actual_wind_speed - min_speed)
+    end
+    
+    handler.sign = sign
+    handler.points = {{tick = game.tick, value = actual_wind_speed}, {tick = till_tick, value = next_point_value}}
+    handler.wait_for_tick = till_tick
+    
+  end
+end
+
+local function onSurfaceCreated(event)
+  initSurface(game.get_surface(event.surface_index).name)
+end
+
+local function onSurfaceImported(event)
+  if global.surface_handlers[event.original_name] then
+    global.surface_handlers[game.get_surface(event.surface_index).name] = global.surface_handlers[event.original_name]
+  else
+    initSurface(game.get_surface(event.surface_index).name)
+  end
+end
+
+local function onSurfaceRenamed(event)
+  if global.surface_handlers[event.old_name] then
+    global.surface_handlers[event.new_name] = global.surface_handlers[event.old_name]
+  else
+    initSurface(event.new_name)
+  end
+end
+
+local function onInit()
+  -- Mod hasn't been intialized
+  if not global.surface_handlers then
+    global.surface_handlers = {}
+  end
+
+  for surface_name, surface in pairs (game.surfaces) do
+    initSurface(surface_name)
+  end
 end
 
 -- get_values
@@ -35,51 +103,14 @@ local function get_value (pointA, pointB)
   return (pointA.value + p) -- Value for current position.
 end
 
-local function on_nth_tick ()
-  -- Mod hasn't been intialized
-  if not global.surface_handlers then
-    global.surface_handlers = {}
-  end
-  
+local function onNthTick ()
   local tick = game.tick
-  local max_speed = 0.2 -- really high speed, default surface speed is 0.02
-  local min_speed = 0
-  
-  -- Season length given in ticks. One tick is 1/60th of a second.
-  -- 1 = tick; 1*60 = one second; 1*60^2 = one minute; 1*60^3 = one hour
-  local shortest_season = 20*60
-  local longest_season =   3*60^2
   
   -- Iterate all surfaces and modify wind_speed on each surface.
   for surface_name, surface in pairs (game.surfaces) do
-    -- If the surface hasn't been intialized yet define the basic structure.
-    if not global.surface_handlers[surface_name] then
-      global.surface_handlers[surface_name] = {min_speed = min_speed, max_speed = max_speed}
-    end
-    
     local handler = global.surface_handlers[surface_name]
     
-    if not handler.sign then
-      -- If the surface hasn't been modified since it's been intialized
-      
-      local season_length = math.ceil(math.random (shortest_season, longest_season)/60)*60 -- in ticks
-      local till_tick = tick + season_length
-      local actual_wind_speed = surface.wind_speed
-      local next_point_value
-      local rnd = math.random()
-      local sign = (actual_wind_speed > max_speed and 1 or -1)
-      
-      if sign > 0 then -- trending towards max_speed
-        next_point_value = actual_wind_speed + rnd * (max_speed - actual_wind_speed)
-      else  -- trending towards min_speed
-        next_point_value = actual_wind_speed - rnd * (actual_wind_speed - min_speed)
-      end
-      
-      handler.sign = sign
-      handler.points = {{tick = tick, value = actual_wind_speed}, {tick = till_tick, value = next_point_value}}
-      handler.wait_for_tick = till_tick
-      
-    elseif handler.wait_for_tick <= tick then
+    if handler.wait_for_tick <= tick then
       -- End of the last defined season has been reached
       
       local actual_wind_speed=surface.wind_speed
@@ -94,10 +125,10 @@ local function on_nth_tick ()
       handler.wait_for_tick = till_tick
       
       if sign > 0 then -- trending towards max_speed
-        wind_changing = prob_low (rnd) * (max_speed - actual_wind_speed)
+        wind_changing = (rnd^2) * (max_speed - actual_wind_speed)
         next_point_value = actual_wind_speed + wind_changing
       else -- trending towards min_speed
-        wind_changing = prob_low (rnd) * (actual_wind_speed - min_speed)
+        wind_changing = (rnd^2) * (actual_wind_speed - min_speed)
         next_point_value = actual_wind_speed - wind_changing
       end
       
@@ -118,4 +149,12 @@ local function on_nth_tick ()
   end -- End of loop for surface
 end -- End of on_nth_tick
 
-script.on_nth_tick(60, on_nth_tick)
+script.on_init(onInit)
+script.on_nth_tick(60, onNthTick)
+
+script.on_configuration_changed(onConfigurationChanged)
+script.on_event(defines.events.on_runtime_mod_setting_changed, onConfigurationChanged)
+
+script.on_event(defines.events.on_surface_created, onSurfaceCreated)
+script.on_event(defines.events.on_surface_imported, onSurfaceImported)
+script.on_event(defines.events.on_surface_renamed, onSurfaceRenamed)
