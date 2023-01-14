@@ -15,11 +15,35 @@ local function onConfigurationChanged()
     -- This doesn't do anything yet.
     windSpeedMax = settings.global["WindSpeedChanging-Tweaked-windSpeedMax"].value
     windSpeedMin = settings.global["WindSpeedChanging-Tweaked-windSpeedMin"].value
-
+    
     -- Season length given in ticks. One tick is 1/60th of a second.
     -- 1 = tick; 1*60 = one second; 1*60^2 = one minute; 1*60^3 = one hour
     seasonShortest = settings.global["WindSpeedChanging-Tweaked-seasonShortest"].value*60
     seasonLongest = settings.global["WindSpeedChanging-Tweaked-seasonLongest"].value*60
+    
+    for surfaceName, _ in pairs(game.surfaces) do
+        local handler = global.surfaceHandlers[surfaceName]
+        
+        if handler.windSpeedMax > windSpeedMax then
+            handler.windSpeedMax = windSpeedMax
+        end
+        
+        if handler.windSpeedMin < windSpeedMin then
+            handler.windSpeedMin = windSpeedMin
+        end
+        
+        for i, point in ipairs(handler.points) do
+            if point.value > windSpeedMax then
+                handler.points[i].value = windSpeedMax
+            end
+            
+            if point.value < windSpeedMin then
+                handler.points[i].value = windSpeedMin
+            end
+        end
+        
+        global.surfaceHandlers[surfaceName] = handler
+    end
 end
 
 local function initSurface(surface_name)
@@ -129,8 +153,8 @@ local function onNthTick ()
         end
         
         local pointsPrevious = handler.points[1]
-        local         pointsLast = handler.points[2]
-        local     windSpeedNew = getValue (pointsPrevious, pointsLast)
+        local     pointsLast = handler.points[2]
+        local   windSpeedNew = getValue (pointsPrevious, pointsLast)
         surface.wind_speed = windSpeedNew
         
         -- game.print("Remaining time for season " .. (math.ceil((pointsLast.tick - game.tick)/60)) .. " s, current wind " .. surface.wind_speed)
