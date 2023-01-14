@@ -11,15 +11,28 @@ local function get_season_length (shortest_season, longest_season, speed_rnd)
   return (math.ceil((shortest_season + rnd_high*(longest_season-shortest_season))/60)*60)
 end
 
-local function get_value (point_1, point_2, tick)
-  local length = point_2.tick - point_1.tick -- Tick difference between points.
-  local high = point_2.value - point_1.value -- Value difference between points.
-  local t = tick - point_1.tick -- Current position between points.
-  local k = (t/length) -- Percentage of progress.
+-- get_values
+-- The function returns a intermediate value for a given point
+-- in time between pointA and pointB. Instead of using a simple average
+-- the goal is to have a somewhat nicer curve that connects both points.
+-- That way instead of having a zigzag change there is a gradual value change.
+local function get_value (pointA, pointB)
+  local duration = pointB.tick - pointA.tick -- Tick difference between points.
+  local targetValue = pointB.value - pointA.value -- Value difference between points.
+  local currentPosition = game.tick - pointA.tick -- Current position between points.
+  local k = (currentPosition/duration) -- Percentage of progress.
   local phi = k*math.pi -- Percentage of PI for current value calculation.
-  local p = high*(1-math.cos(phi))/2 -- Percentage of value difference between points at current position.
-  local result = (point_1.value + p) -- Value for current position.
-  return result
+  
+  -- In order to have a smoothed out change a trigonomtry function is used as a base
+  -- to "ride" on with the gradual calculation of the value for a given tick.
+  -- The value that is being calculated is used as a precentage of the value difference
+  -- between pointA and point B.
+  -- The cosine will be between 1 and -1. By calculating 1-cos it's going to be between
+  -- 0 and 2 and by dividing this by 2 it will be normalized to be between 0 and 1 and
+  -- can be used a precentage.
+  local p = targetValue*(1-math.cos(phi))/2
+
+  return (pointA.value + p) -- Value for current position.
 end
 
 local function on_nth_tick ()
@@ -43,7 +56,7 @@ local function on_nth_tick ()
     if not global.surface_handlers[surface_name] then
       global.surface_handlers[surface_name] = {min_speed = min_speed, max_speed = max_speed}
     end
-
+    
     local handler = global.surface_handlers[surface_name]
     
     if not handler.sign then
@@ -54,15 +67,14 @@ local function on_nth_tick ()
       local actual_wind_speed = surface.wind_speed
       local next_point_value
       local rnd = math.random()
-      local sign = 1
-      if actual_wind_speed > max_speed then sign = -1 end
-
+      local sign = (actual_wind_speed > max_speed and 1 or -1)
+      
       if sign > 0 then -- trending towards max_speed
-        next_point_value = actual_wind_speed + rnd * (max_speed - actual_wind_speed) 
+        next_point_value = actual_wind_speed + rnd * (max_speed - actual_wind_speed)
       else  -- trending towards min_speed
-        next_point_value = actual_wind_speed - rnd * (actual_wind_speed - min_speed) 
+        next_point_value = actual_wind_speed - rnd * (actual_wind_speed - min_speed)
       end
-
+      
       handler.sign = sign
       handler.points = {{tick = tick, value = actual_wind_speed}, {tick = till_tick, value = next_point_value}}
       handler.wait_for_tick = till_tick
@@ -98,7 +110,7 @@ local function on_nth_tick ()
       local points_amount = #handler.points -- Length of points table
       local prelast_point = handler.points[points_amount-1]
       local    last_point = handler.points[points_amount]
-      local new_wind_speed = get_value (prelast_point, last_point, tick)
+      local new_wind_speed = get_value (prelast_point, last_point)
       
       surface.wind_speed = new_wind_speed
     end
