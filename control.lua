@@ -1,21 +1,18 @@
-function prob_low (value)
+local function prob_low (value)
   return value^2
 end
 
-
-function prob_high (value)
+local function prob_high (value)
   return (1-(1-value)^2)
 end
 
-
-function get_season_length (shortest_season, longest_season, speed_rnd)
+local function get_season_length (shortest_season, longest_season, speed_rnd)
   -- local rnd_high = 1-(1-math.random())*(1-speed_rnd)
   local rnd_high = prob_high (speed_rnd)
   return (math.ceil((shortest_season + rnd_high*(longest_season-shortest_season))/60)*60)
 end
 
-
-function get_value (point_1, point_2, tick)
+local function get_value (point_1, point_2, tick)
   local lenght = point_2.tick - point_1.tick -- positive
   -- game.print ('lenght: ' .. lenght)
   local high = point_2.value - point_1.value -- positive or negative
@@ -31,12 +28,14 @@ function get_value (point_1, point_2, tick)
   local result = (point_1.value + p)
   -- game.print ('result: ' .. result)
   
-  
   return result
 end
 
-function on_nth_tick ()
-  if not global.surface_handlers then global.surface_handlers = {} end
+local function on_nth_tick ()
+  if not global.surface_handlers then
+    global.surface_handlers = {}
+  end
+
   local tick = game.tick
   
   local max_speed = 0.2 -- really high speed
@@ -50,7 +49,10 @@ function on_nth_tick ()
   -- local longest_season = 20*60 -- 20 seconds
   
   for surface_name, surface in pairs (game.surfaces) do
-    if not global.surface_handlers[surface_name] then global.surface_handlers[surface_name] = {min_speed = min_speed, max_speed = max_speed} end
+    if not global.surface_handlers[surface_name] then
+      global.surface_handlers[surface_name] = {min_speed = min_speed, max_speed = max_speed}
+    end
+
     local handler = global.surface_handlers[surface_name]
     if not handler.sign then
       -- first start
@@ -62,6 +64,7 @@ function on_nth_tick ()
       -- game.print ('sign = ' .. sign )
       local next_point_value
       local rnd = math.random()
+
       if sign > 0 then -- goes up
         -- game.print ('actual_wind_speed = ' .. actual_wind_speed .. ' rnd = ' .. rnd .. ' max_speed = ' .. max_speed)
         next_point_value = actual_wind_speed + rnd * (max_speed - actual_wind_speed) 
@@ -76,7 +79,6 @@ function on_nth_tick ()
       
     elseif handler.wait_for_tick <= tick then
       -- new point
-
       local actual_wind_speed=surface.wind_speed
       local sign = -handler.sign
       local next_point_value
