@@ -1,11 +1,11 @@
 {
-  "name": "WindSpeedChanging",
+  "name": "WindSpeedChanging-Tweaked",
   "version": "1.1.2",
   
-  "title": "Wind Speed Changing",
-  "description": "The speed of wind changes dynamically",
+  "title": "Wind Speed Changing (Tweaked)",
+  "description": "Makes the wind speed on surfaces dynamic.",
   
-  "author": "darkfrei",
+  "author": "darkfrei, Seth",
   "license": "MIT",
   
   "dependencies": ["base"],
