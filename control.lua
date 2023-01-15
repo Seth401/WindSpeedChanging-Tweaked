@@ -202,6 +202,25 @@ local function onNthTick ()
     end -- End of loop for surface
 end -- End of on_nth_tick
 
+commands.add_command("wind_information", nil, function(command)
+    for surfaceName, surface in pairs (game.surfaces) do
+        if not global.surfaceHandlers[surfaceName] then
+            game.print(("Surface " .. surfaceName .. " doesn't have a handler."))
+        else
+            local handler = global.surfaceHandlers[surfaceName]
+            
+            game.print(
+                "Surface " .. surfaceName ..
+                " does have a min of " .. handler.windSpeedMin .. " (" .. string.format("%.3f",(handler.windSpeedMin/windSpeedMin)*100) .. "%)" ..
+                " a max of " .. handler.windSpeedMax  .. " (" .. string.format("%.3f",(handler.windSpeedMax/windSpeedMax)*100) .. "%)" ..
+                " currently trending towards " .. (handler.sign > 0 and "max, " or "min, ") .. 
+                " current speed is " .. string.format("%.3f",(surface.wind_speed/handler.windSpeedMax)*100) .. "% of max" ..
+                " current season runs another " .. (math.ceil((handler.points[2].tick - game.tick)/60)) .. "s"
+            )
+        end
+    end
+end)
+
 script.on_init(onInit)
 script.on_nth_tick(60, onNthTick)
 
