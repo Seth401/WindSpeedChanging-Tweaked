@@ -6,12 +6,71 @@ local windSpeedMin = settings.global["WindSpeedChanging-Tweaked-windSpeedMin"].v
 local seasonShortest = settings.global["WindSpeedChanging-Tweaked-seasonShortest"].value*60
 local seasonLongest = settings.global["WindSpeedChanging-Tweaked-seasonLongest"].value*60
 
+local varySurfaceSpeeds = settings.global["WindSpeedChanging-Tweaked-varySurfaceSpeeds"].value
+local varySurfaceSpeedsCoefficient = settings.global["WindSpeedChanging-Tweaked-varyCoefficient"].value
+
 local function calcSeasonLength(lengthMin, lengthMax)
     local durationVariance = (lengthMax-lengthMin) -- Difference between the min and max
     return lengthMin + math.ceil(durationVariance * (1-(1-math.random())^2))
 end
 
-local function onConfigurationChanged()
+local function initSurface(surface_name)
+    -- If the surface hasn't been intialized yet define the basic structure.
+    local surfaceWindSpeed = game.get_surface(surface_name).wind_speed
+    local surfaceWindMin = windSpeedMin
+    local surfaceWindMax = windSpeedMax
+    
+    if varySurfaceSpeeds == true then
+        local surfaceWindMinLower = math.max(0, (windSpeedMin - (windSpeedMin * varySurfaceSpeedsCoefficient)))
+        local surfaceWindMinUpper = math.max(0, (windSpeedMin + (windSpeedMin * varySurfaceSpeedsCoefficient)))
+        surfaceWindMin = surfaceWindMinLower + (surfaceWindMinUpper-surfaceWindMinLower) * math.random()
+        
+        local surfaceWindMaxLower = math.max(0, (windSpeedMax - (windSpeedMax * varySurfaceSpeedsCoefficient)))
+        local surfaceWindMaxUpper = math.max(0, (windSpeedMax + (windSpeedMax * varySurfaceSpeedsCoefficient)))
+        surfaceWindMax = surfaceWindMaxLower + (surfaceWindMaxUpper-surfaceWindMaxLower) * math.random()
+    end
+    
+    if not global.surfaceHandlers[surface_name] then
+        global.surfaceHandlers[surface_name] = {
+            windSpeedMin = surfaceWindMin,
+            windSpeedMax = surfaceWindMax,
+            sign = ( surfaceWindSpeed > surfaceWindMax and 1 or -1 ),
+            points = {
+                {tick = 0, value = surfaceWindSpeed},
+                {tick = 1, value = surfaceWindSpeed}
+            }
+        }
+    else
+        global.surfaceHandlers[surface_name].windSpeedMin = surfaceWindMin
+        global.surfaceHandlers[surface_name].windSpeedMax = surfaceWindMax
+        global.surfaceHandlers[surface_name].sign = ( surfaceWindSpeed > surfaceWindMax and 1 or -1 )
+    end
+    
+    -- game.print("Intialized Surface " .. surface_name .. " with max " .. surfaceWindMax .. " (" .. string.format("%.3f", (surfaceWindMax/windSpeedMax)*100) .. "%) and min " .. surfaceWindMin .. " (" .. string.format("%.3f", (surfaceWindMin/windSpeedMin)*100) .. "%) " .. (varySurfaceSpeeds == false and "and can't be varied" or "while it can be varied by " .. (varySurfaceSpeedsCoefficient*100) .. "%"))
+end
+
+
+local function onConfigurationChanged(event)
+    local options = {
+        "WindSpeedChanging-Tweaked-windSpeedMax",
+        "WindSpeedChanging-Tweaked-windSpeedMin",
+        "WindSpeedChanging-Tweaked-seasonShortest",
+        "WindSpeedChanging-Tweaked-seasonLongest",
+        "WindSpeedChanging-Tweaked-varySurfaceSpeeds",
+        "WindSpeedChanging-Tweaked-varyCoefficient"
+    }
+    local foundOption = false
+    
+    for _,v in pairs(options) do
+        if v == event.setting then
+            foundOption = true
+        end
+    end
+    
+    if foundOption == false then
+        return
+    end
+    
     -- This doesn't do anything yet.
     windSpeedMax = settings.global["WindSpeedChanging-Tweaked-windSpeedMax"].value
     windSpeedMin = settings.global["WindSpeedChanging-Tweaked-windSpeedMin"].value
@@ -21,16 +80,13 @@ local function onConfigurationChanged()
     seasonShortest = settings.global["WindSpeedChanging-Tweaked-seasonShortest"].value*60
     seasonLongest = settings.global["WindSpeedChanging-Tweaked-seasonLongest"].value*60
     
+    varySurfaceSpeeds = settings.global["WindSpeedChanging-Tweaked-varySurfaceSpeeds"].value
+    varySurfaceSpeedsCoefficient = settings.global["WindSpeedChanging-Tweaked-varyCoefficient"].value
+    
     for surfaceName, _ in pairs(game.surfaces) do
+        initSurface(surfaceName)
+        
         local handler = global.surfaceHandlers[surfaceName]
-        
-        if handler.windSpeedMax > windSpeedMax then
-            handler.windSpeedMax = windSpeedMax
-        end
-        
-        if handler.windSpeedMin < windSpeedMin then
-            handler.windSpeedMin = windSpeedMin
-        end
         
         for i, point in ipairs(handler.points) do
             if point.value > windSpeedMax then
@@ -43,22 +99,6 @@ local function onConfigurationChanged()
         end
         
         global.surfaceHandlers[surfaceName] = handler
-    end
-end
-
-local function initSurface(surface_name)
-    -- If the surface hasn't been intialized yet define the basic structure.
-    local surfaceWindSpeed = game.get_surface(surface_name).wind_speed
-    if not global.surfaceHandlers[surface_name] then
-        global.surfaceHandlers[surface_name] = {
-            windSpeedMin = windSpeedMin,
-            windSpeedMax = windSpeedMax,
-            sign = ( surfaceWindSpeed > windSpeedMax and 1 or -1),
-            points = {
-                {tick = 0, value = surfaceWindSpeed},
-                {tick = 1, value = surfaceWindSpeed}
-            }
-        }
     end
 end
 
@@ -113,7 +153,7 @@ local function getValue (pointA, pointB)
     -- 0 and 2 and by dividing this by 2 it will be normalized to be between 0 and 1 and
     -- can be used a precentage.
     local p = targetValue*(1-math.cos(phi))/2
-
+    
     return (pointA.value + p) -- Value for current position.
 end
 
@@ -149,7 +189,7 @@ local function onNthTick ()
             handler.points[1] = handler.points[2]
             handler.points[2] = {tick = tickFuture, value = valueNext}
             
-            -- game.print("New Season with a length of " .. (seasonLength/60) ..    " s for surface " .. surfaceName)
+            -- game.print("New Season with a length of " .. (math.ceil(seasonLength/60)) ..    " s for surface " .. surfaceName .. " between " .. handler.windSpeedMin .. " and " .. handler.windSpeedMax .. " target " .. string.format("%.3f", ((valueNext/handler.windSpeedMax)*100)) .. "%")
         end
         
         local pointsPrevious = handler.points[1]
@@ -157,7 +197,7 @@ local function onNthTick ()
         local   windSpeedNew = getValue (pointsPrevious, pointsLast)
         surface.wind_speed = windSpeedNew
         
-        -- game.print("Remaining time for season " .. (math.ceil((pointsLast.tick - game.tick)/60)) .. " s, current wind " .. surface.wind_speed)
+        -- game.print("Remaining time for season " .. (math.ceil((pointsLast.tick - game.tick)/60)) .. " s, current wind " .. string.format("%.3f", ((surface.wind_speed/handler.windSpeedMax)*100)) .. "%")
         
     end -- End of loop for surface
 end -- End of on_nth_tick
@@ -165,7 +205,7 @@ end -- End of on_nth_tick
 script.on_init(onInit)
 script.on_nth_tick(60, onNthTick)
 
-script.on_configuration_changed(onConfigurationChanged)
+-- script.on_configuration_changed(onConfigurationChanged)
 script.on_event(defines.events.on_runtime_mod_setting_changed, onConfigurationChanged)
 
 script.on_event(defines.events.on_surface_created, onSurfaceCreated)

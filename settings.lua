@@ -32,5 +32,20 @@ data:extend(
             default_value = 0.2,
             minimum_value = 0,
         },
+        {
+            setting_type = "runtime-global",
+            name = "WindSpeedChanging-Tweaked-varySurfaceSpeeds",
+            
+            type = "bool-setting",
+            default_value = true,
+        },
+        {
+            setting_type = "runtime-global",
+            name = "WindSpeedChanging-Tweaked-varyCoefficient",
+            
+            type = "double-setting",
+            default_value = 0.25,
+            minimum_value = 0,
+        },
     }
 )
